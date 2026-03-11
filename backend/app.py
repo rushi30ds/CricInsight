@@ -13,7 +13,7 @@ import match_stats
 import player_stats
 
 app = Flask(__name__)
-CORS(app)
+CORS(app,origins=["https://cerulean-ganache-7262cb.netlify.app"])
 
 CRICAPI_KEY  = "cb21ebff-f95b-44fb-8a0e-96dc045065c0"
 CRICAPI_BASE = "https://api.cricapi.com/v1"

@@ -19,6 +19,7 @@
   --border: rgba(245,166,35,0.15);
   --text: #e8eaf0;
   --muted: #6b7899;
+  --live: #ff4d4d;
   --font-display: 'Bebas Neue', sans-serif;
   --font-body: 'DM Sans', sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
@@ -54,6 +55,12 @@ header {
 .logo h1 { font-family:var(--font-display); font-size:26px; letter-spacing:2px; color:#fff; }
 .logo span { font-size:12px; color:var(--muted); font-weight:300; display:block; margin-top:-2px; }
 .header-right { display:flex; align-items:center; gap:12px; }
+.live-dot {
+  display:flex; align-items:center; gap:6px;
+  font-size:11px; font-family:var(--font-mono); color:var(--live);
+  background:rgba(255,77,77,0.1); border:1px solid rgba(255,77,77,0.25);
+  padding:5px 12px; border-radius:20px;
+}
 .live-dot::before {
   content:''; width:7px; height:7px; background:var(--live);
   border-radius:50%; animation:pulse 1.5s infinite;
@@ -217,6 +224,7 @@ select option { background:var(--navy2); }
 .match-header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px; }
 .match-type { font-size:10px; font-family:var(--font-mono); color:var(--muted); letter-spacing:0.5px; }
 .match-status-badge { font-size:10px; padding:3px 8px; border-radius:5px; font-weight:600; }
+.status-live { background:rgba(255,77,77,0.15); color:var(--live); }
 .status-completed { background:rgba(0,201,167,0.1); color:var(--teal); }
 .status-upcoming { background:rgba(78,136,255,0.1); color:#4e88ff; }
 .match-teams { display:flex; align-items:center; gap:12px; margin-bottom:10px; }
@@ -353,12 +361,15 @@ select option { background:var(--navy2); }
     </div>
   </div>
   <div class="header-right">
+    <div class="live-dot">LIVE</div>
   </div>
 </header>
 
 <nav class="nav">
-
-  <button class="nav-btn active" onclick="switchTab('schedule', this)">
+  <button class="nav-btn active" onclick="switchTab('live', this)">
+    🔴 Live Scores <span class="new-tag">LIVE</span>
+  </button>
+  <button class="nav-btn" onclick="switchTab('schedule', this)">
     📅 IPL Schedule <span class="new-tag">NEW</span>
   </button>
   <button class="nav-btn" onclick="switchTab('player', this)">
@@ -383,8 +394,26 @@ select option { background:var(--navy2); }
 
 <main>
 
+  <!-- ══ LIVE SCORES ══ -->
+  <div id="panel-live" class="panel active">
+    <div class="section-title">Live Scores</div>
+    <div class="section-sub">Real-time match scores powered by CricAPI</div>
+    <div class="card">
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:18px;">
+        <button class="btn btn-primary" onclick="loadLiveScores()">🔄 Refresh</button>
+        <span class="auto-refresh" id="last-updated"></span>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;color:var(--muted);font-size:12px;">
+          <input type="checkbox" id="auto-refresh-toggle" onchange="toggleAutoRefresh(this.checked)" style="width:auto;padding:0;"> Auto-refresh (30s)
+        </label>
+      </div>
+      <div id="live-output">
+        <div class="loader"><div class="spinner"></div> Loading live scores...</div>
+      </div>
+    </div>
+  </div>
+
   <!-- ══ SCHEDULE ══ -->
-  <div id="panel-schedule" class="panel active">
+  <div id="panel-schedule" class="panel">
     <div class="section-title">IPL Schedule</div>
     <div class="section-sub">Upcoming and recent IPL series & fixtures</div>
     <div class="card">
@@ -506,8 +535,9 @@ select option { background:var(--navy2); }
 <div id="toast"></div>
 
 <script>
-const BASE = "https://cricinsight.onrender.com";
+const BASE = "http://127.0.0.1:5000";
 let allTeams = [];
+let autoRefreshTimer = null;
 
 // ── TAB ──
 function switchTab(id, btn) {
@@ -833,8 +863,9 @@ async function loadPlayerInfo(playerId) {
     const p = data.data;
     const stats = p.stats || [];
 
-    const battingStats = stats.filter(s => s.fn === 'batting');
-    const bowlingStats = stats.filter(s => s.fn === 'bowling');
+    const battingStats = stats.filter(s => s.fn === 'batting' || s.type === 'batting');
+    const bowlingStats = stats.filter(s => s.fn === 'bowling' || s.type === 'bowling');
+    const v = (s, key) => s?.stats?.[key] ?? s?.values?.[key] ?? s?.[key] ?? '-';
 
     out.innerHTML = `
       <div class="player-detail">
@@ -867,11 +898,11 @@ async function loadPlayerInfo(playerId) {
           <thead><tr><th>Format</th><th>M</th><th>Inn</th><th>Runs</th><th>HS</th><th>Avg</th><th>SR</th><th>50s</th><th>100s</th></tr></thead>
           <tbody>${battingStats.map(s=>`<tr>
             <td style="font-weight:600;color:var(--gold)">${s.matchtype?.toUpperCase()||'-'}</td>
-            <td>${s.stats?.mat||'-'}</td><td>${s.stats?.inns||'-'}</td>
-            <td style="color:var(--teal);font-weight:600">${s.stats?.runs||'-'}</td>
-            <td>${s.stats?.hs||'-'}</td>
-            <td>${s.stats?.avg||'-'}</td><td>${s.stats?.sr||'-'}</td>
-            <td>${s.stats?.['50s']||'-'}</td><td>${s.stats?.['100s']||'-'}</td>
+            <td>${v(s,'mat')}</td><td>${v(s,'inns')}</td>
+            <td style="color:var(--teal);font-weight:600">${v(s,'runs')}</td>
+            <td>${v(s,'hs')}</td>
+            <td>${v(s,'avg')}</td><td>${v(s,'sr')}</td>
+            <td>${v(s,'50s')}</td><td>${v(s,'100s')}</td>
           </tr>`).join('')}</tbody>
         </table></div>` : ''}
 
@@ -882,10 +913,10 @@ async function loadPlayerInfo(playerId) {
           <thead><tr><th>Format</th><th>M</th><th>Inn</th><th>Wkts</th><th>Avg</th><th>Eco</th><th>SR</th><th>Best</th><th>5W</th></tr></thead>
           <tbody>${bowlingStats.map(s=>`<tr>
             <td style="font-weight:600;color:var(--gold)">${s.matchtype?.toUpperCase()||'-'}</td>
-            <td>${s.stats?.mat||'-'}</td><td>${s.stats?.inns||'-'}</td>
-            <td style="color:var(--crimson);font-weight:600">${s.stats?.wkts||'-'}</td>
-            <td>${s.stats?.avg||'-'}</td><td>${s.stats?.econ||'-'}</td><td>${s.stats?.sr||'-'}</td>
-            <td>${s.stats?.bbi||'-'}</td><td>${s.stats?.['5w']||'-'}</td>
+            <td>${v(s,'mat')}</td><td>${v(s,'inns')}</td>
+            <td style="color:var(--crimson);font-weight:600">${v(s,'wkts')}</td>
+            <td>${v(s,'avg')}</td><td>${v(s,'econ')}</td><td>${v(s,'sr')}</td>
+            <td>${v(s,'bbi')}</td><td>${v(s,'5w')}</td>
           </tr>`).join('')}</tbody>
         </table></div>` : ''}
     `;
@@ -1095,6 +1126,7 @@ async function getBowling() {
 
 // ── INIT ──
 window.addEventListener('load', () => {
+  loadLiveScores();
   loadTeams();
 });
 </script>
